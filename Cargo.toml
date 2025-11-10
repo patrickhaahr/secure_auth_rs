@@ -1,0 +1,10 @@
+[package]
+name = "secure_auth_rs"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axum = "0.8.6"
+serde = { version = "1.0.228", features = ["derive"] }
+sqlx = { version = "0.8.6", features = ["runtime-tokio", "sqlite", "macros"] }
+tokio = { version = "1.48.0", features = ["macros", "rt-multi-thread"] }

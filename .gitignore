@@ -1,0 +1,4 @@
+/target
+*.md
+!AGENTS.md 
+.env
