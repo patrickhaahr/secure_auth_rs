@@ -7,21 +7,17 @@ use sqlx::FromRow;
 pub struct Account {
     /// UUID v4 (primary key)
     pub id: String,
-    /// User-facing random account ID (for login)
-    pub account_id: String,
     /// ISO 8601 timestamp
     pub created_at: String,
 }
 
-/// CPR data model - Encrypted CPR information
+/// CPR data model - Hashed CPR information
 /// Maps to: cpr_data table
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct CprData {
     /// Foreign key to accounts.id
     pub account_id: String,
-    /// Encrypted CPR bytes (age encryption + nonce)
-    pub cpr_encrypted: Vec<u8>,
-    /// HMAC-SHA256 hash for uniqueness check (never decrypt)
+    /// Argon2id hash for uniqueness check and secure verification
     pub cpr_hash: String,
     /// ISO 8601 timestamp
     pub verified_at: String,
@@ -45,6 +41,8 @@ pub struct Passkey {
     pub aaguid: Vec<u8>,
     /// Attestation type: 'none', 'indirect', 'direct'
     pub attestation_type: String,
+    /// User-defined nickname for the passkey
+    pub nickname: Option<String>,
     /// ISO 8601 timestamp
     pub created_at: String,
     /// ISO 8601 timestamp (nullable)

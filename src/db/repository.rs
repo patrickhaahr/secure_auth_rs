@@ -5,17 +5,15 @@ use sqlx::{Pool, Sqlite};
 pub async fn create_account(
     pool: &Pool<Sqlite>,
     id: &str,
-    account_id: &str,
 ) -> Result<Account, sqlx::Error> {
     sqlx::query_as::<_, Account>(
         r#"
-        INSERT INTO accounts (id, account_id, created_at)
-        VALUES (?, ?, datetime('now'))
-        RETURNING id, account_id, created_at
+        INSERT INTO accounts (id, created_at)
+        VALUES (?, datetime('now'))
+        RETURNING id, created_at
         "#,
     )
     .bind(id)
-    .bind(account_id)
     .fetch_one(pool)
     .await
 }
@@ -51,18 +49,16 @@ pub async fn is_admin(pool: &Pool<Sqlite>, account_id: &str) -> Result<bool, sql
 pub async fn insert_cpr_data(
     pool: &Pool<Sqlite>,
     account_id: &str,
-    cpr_encrypted: &[u8],
     cpr_hash: &str,
 ) -> Result<CprData, sqlx::Error> {
     sqlx::query_as::<_, CprData>(
         r#"
-        INSERT INTO cpr_data (account_id, cpr_encrypted, cpr_hash, verified_at)
-        VALUES (?, ?, ?, datetime('now'))
-        RETURNING id, account_id, cpr_encrypted, cpr_hash, verified_at
+        INSERT INTO cpr_data (account_id, cpr_hash, verified_at)
+        VALUES (?, ?, datetime('now'))
+        RETURNING account_id, cpr_hash, verified_at
         "#,
     )
     .bind(account_id)
-    .bind(cpr_encrypted)
     .bind(cpr_hash)
     .fetch_one(pool)
     .await
@@ -90,16 +86,17 @@ pub async fn insert_passkey(
     public_key: &[u8],
     aaguid: &[u8],
     attestation_type: &str,
+    nickname: Option<&str>,
 ) -> Result<Passkey, sqlx::Error> {
     sqlx::query_as::<_, Passkey>(
         r#"
         INSERT INTO passkeys (
             id, account_id, credential_id, public_key, sign_count,
-            aaguid, attestation_type, created_at, last_used_at 
+            aaguid, attestation_type, nickname, created_at, last_used_at 
         )
-        VALUES (?, ?, ?, ?, 0, ?, ?, datetime('now'), NULL)
+        VALUES (?, ?, ?, ?, 0, ?, ?, ?, datetime('now'), NULL)
         RETURNING id, account_id, credential_id, public_key,
-            sign_count, aaguid, attestation_type, created_at, last_used_at
+            sign_count, aaguid, attestation_type, nickname, created_at, last_used_at
         "#,
     )
     .bind(id)
@@ -108,6 +105,7 @@ pub async fn insert_passkey(
     .bind(public_key)
     .bind(aaguid)
     .bind(attestation_type)
+    .bind(nickname)
     .fetch_one(pool)
     .await
 }
@@ -119,7 +117,7 @@ pub async fn find_passkeys_by_account(
     sqlx::query_as::<_, Passkey>(
         r#"
         SELECT id, account_id, credential_id, public_key, 
-               sign_count, aaguid, attestation_type, 
+               sign_count, aaguid, attestation_type, nickname,
                created_at, last_used_at
         FROM passkeys
         WHERE account_id = ?

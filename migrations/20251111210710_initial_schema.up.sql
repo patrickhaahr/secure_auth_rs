@@ -1,64 +1,61 @@
 -- Enable foreign keys
 PRAGMA foreign_keys = ON;
 
--- Core account: UUID primary key, random AccountID for login
+-- Core account
 CREATE TABLE accounts (
-    id TEXT PRIMARY KEY,  -- UUID v4 (32 chars hex + 4 hyphens)
-    account_id TEXT UNIQUE NOT NULL COLLATE NOCASE,  -- User-facing random ID
+    id TEXT PRIMARY KEY COLLATE NOCASE,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- CPR: mandatory, encrypted, globally unique (10 digits)
+-- CPR data
 CREATE TABLE cpr_data (
     account_id TEXT PRIMARY KEY,
-    cpr_encrypted BLOB NOT NULL,  -- Encrypted with age + random nonce
-    cpr_hash TEXT NOT NULL UNIQUE,  -- HMAC-SHA256 for uniqueness check
+    cpr_hash TEXT NOT NULL UNIQUE,
     verified_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
 );
 
--- WebAuthn passkeys: max 5 per account
+-- Passkeys
 CREATE TABLE passkeys (
-    id TEXT PRIMARY KEY,  -- UUID v4
+    id TEXT PRIMARY KEY,
     account_id TEXT NOT NULL,
-    credential_id BLOB UNIQUE NOT NULL,  -- WebAuthn raw credential ID
-    public_key BLOB NOT NULL,            -- COSE public key bytes
-    sign_count INTEGER NOT NULL DEFAULT 0,
-    aaguid BLOB NOT NULL,                -- 16-byte authenticator AAGUID
-    attestation_type TEXT NOT NULL,      -- 'none', 'indirect', 'direct'
+    credential_id BLOB UNIQUE NOT NULL,
+    public_key BLOB NOT NULL,
+    sign_count INTEGER NOT NULL DEFAULT 0 CHECK(sign_count >= 0),
+    aaguid BLOB NOT NULL,
+    attestation_type TEXT NOT NULL CHECK(attestation_type IN ('none', 'indirect', 'direct')),
+    nickname TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     last_used_at TIMESTAMP,
     FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
 );
 
--- TOTP: optional, encrypted, one per account
+-- TOTP secrets
 CREATE TABLE totp_secrets (
     account_id TEXT PRIMARY KEY,
-    secret_encrypted BLOB NOT NULL,  -- Encrypted base32 secret (32+ chars)
-    algorithm TEXT NOT NULL DEFAULT 'SHA1' 
-        CHECK(algorithm IN ('SHA1')),  -- SHA1 only for compatibility
+    secret_encrypted BLOB NOT NULL,
+    algorithm TEXT NOT NULL DEFAULT 'SHA1' CHECK(algorithm IN ('SHA1')),
     digits INTEGER NOT NULL DEFAULT 6 CHECK(digits = 6),
     period INTEGER NOT NULL DEFAULT 30 CHECK(period = 30),
-    is_verified BOOLEAN NOT NULL DEFAULT 0,
+    is_verified BOOLEAN NOT NULL DEFAULT 0 CHECK(is_verified IN (0, 1)),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
 );
 
--- Admin flag: manually set via DB only (no HTTP endpoint)
+-- Admin roles
 CREATE TABLE account_roles (
     account_id TEXT PRIMARY KEY,
-    is_admin BOOLEAN NOT NULL DEFAULT 0,
+    is_admin BOOLEAN NOT NULL DEFAULT 0 CHECK(is_admin IN (0, 1)),
     assigned_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
 );
 
 -- Indexes
-CREATE UNIQUE INDEX idx_accounts_account_id ON accounts(account_id);
-CREATE UNIQUE INDEX idx_cpr_hash ON cpr_data(cpr_hash);  -- Fast uniqueness
 CREATE INDEX idx_passkeys_account_id ON passkeys(account_id);
 CREATE INDEX idx_passkeys_credential_id ON passkeys(credential_id);
+CREATE UNIQUE INDEX idx_cpr_hash ON cpr_data(cpr_hash);
 
--- Enforce 5 passkey limit at DB level
+-- Passkey limit trigger
 CREATE TRIGGER enforce_passkey_limit 
 BEFORE INSERT ON passkeys
 FOR EACH ROW
@@ -68,4 +65,3 @@ BEGIN
         THEN RAISE(ABORT, 'Maximum 5 passkeys per account exceeded')
     END;
 END;
-
