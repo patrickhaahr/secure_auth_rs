@@ -21,7 +21,7 @@
         <div id="totpSetupStep" style="display:none;">
             <h2>Scan QR Code</h2>
             <div id="qrContainer">
-                <img id="qrImage" style="max-width: 300px; display:none;" alt="QR Code">
+                <img id="qrImage" alt="QR Code" style="display:none;">
                 <p id="qrUri" style="display:none;"></p>
             </div>
             <p>Secret: <code id="secret" style="cursor:pointer;" title="Click to reveal">••••••••••••••••</code></p>
@@ -135,15 +135,23 @@
               const data = await response.json();
               totpSecretData = data.secret; // Store in memory only
               
+              console.log("QR URI received:", data.qr_uri.substring(0, 50));
+              
               // Render QR code as image
+              const qrImage = document.getElementById("qrImage");
+              const qrUri = document.getElementById("qrUri");
+              
               if (data.qr_uri.startsWith("data:image") || data.qr_uri.startsWith("http")) {
-                  document.getElementById("qrImage").src = data.qr_uri;
-                  document.getElementById("qrImage").style.display = "block";
-                  document.getElementById("qrUri").style.display = "none";
+                  console.log("Setting QR as image");
+                  qrImage.src = data.qr_uri;
+                  qrImage.style.display = "block";
+                  qrImage.style.maxWidth = "300px";
+                  qrUri.style.display = "none";
               } else {
-                  document.getElementById("qrUri").textContent = data.qr_uri;
-                  document.getElementById("qrUri").style.display = "block";
-                  document.getElementById("qrImage").style.display = "none";
+                  console.log("Setting QR as text");
+                  qrUri.textContent = data.qr_uri;
+                  qrUri.style.display = "block";
+                  qrImage.style.display = "none";
               }
 
               // Setup secret reveal handler

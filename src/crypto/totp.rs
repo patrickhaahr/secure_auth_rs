@@ -5,6 +5,7 @@ use aes_gcm::{
 use rand_core::{OsRng, RngCore};
 use totp_rs::{Algorithm, Secret, TOTP};
 use zeroize::Zeroizing;
+use base64::{Engine as _, engine::general_purpose};
 
 /// Error type for TOTP operations
 #[derive(Debug)]
@@ -315,7 +316,7 @@ pub fn verify_totp_code(secret: &str, code: &str) -> Result<bool, TotpError> {
     Ok(is_valid)
 }
 
-/// Generates an otpauth:// URI for QR code generation
+/// Generates a base64-encoded QR code image as a data URI
 ///
 /// # Arguments
 /// * `secret` - Base32-encoded TOTP secret
@@ -323,16 +324,13 @@ pub fn verify_totp_code(secret: &str, code: &str) -> Result<bool, TotpError> {
 /// * `issuer` - Service name (e.g. Authenticator App)
 ///
 /// # Returns
-/// otpauth:// URI string for QR code generation
-///
-/// # Format
-/// otpauth://totp/{issuer}:{account_id}?secret={secret}&issuer={issuer}&algorithm=SHA512&digits=6&period=30
+/// Base64-encoded PNG image as data URI (data:image/png;base64,...)
 ///
 /// # Example
 /// ```rust
-/// let uri = generate_qr_uri("JBSWY3DPEHPK3PXP", "A1B2C3D4E5F6G7H8", "AuthApp");
-/// // Returns: "otpauth://totp/AuthApp:A1B2C3D4E5F6G7H8?secret=JBSWY3DPEHPK3PXP&issuer=AuthApp&algorithm=SHA512&digits=6&period=30"
-/// // Generate QR code from this URI and display to user
+/// let qr_data_uri = generate_qr_uri("JBSWY3DPEHPK3PXP", "A1B2C3D4E5F6G7H8", "AuthApp");
+/// // Returns: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
+/// // Can be directly used as img src in HTML
 /// ```
 pub fn generate_qr_uri(secret: &str, account_id: &str, issuer: &str) -> Result<String, TotpError> {
     // Parse the base32 secret
@@ -357,11 +355,18 @@ pub fn generate_qr_uri(secret: &str, account_id: &str, issuer: &str) -> Result<S
         TotpError::TotpCreationFailed(e.to_string())
     })?;
 
-    // Get the otpauth URL
-    let url = totp.get_url();
+    // Generate QR code as PNG bytes
+    let qr_bytes = totp.get_qr_png().map_err(|e| {
+        tracing::error!("Failed to generate QR code: {}", e);
+        TotpError::TotpCreationFailed(format!("QR generation failed: {}", e))
+    })?;
 
-    tracing::debug!("Generated TOTP QR URI for account {}", account_id);
-    Ok(url)
+    // Encode to base64 and create data URI
+    let base64_qr = general_purpose::STANDARD.encode(&qr_bytes);
+    let data_uri = format!("data:image/png;base64,{}", base64_qr);
+
+    tracing::debug!("Generated TOTP QR code for account {}", account_id);
+    Ok(data_uri)
 }
 
 #[cfg(test)]
