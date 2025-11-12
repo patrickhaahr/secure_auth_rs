@@ -1,4 +1,10 @@
-use axum::{extract::State, http::StatusCode, response::Json};
+use axum::{
+    extract::State, 
+    http::StatusCode, 
+    response::Json,
+};
+use axum_extra::extract::cookie::CookieJar;
+use crate::middleware::auth::AuthenticatedUser;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -49,8 +55,17 @@ pub struct LoginRequest {
 pub struct LoginResponse {
     success: bool,
     message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    token: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct LogoutResponse {
+    success: bool,
+    message: String,
+}
+
+#[derive(Serialize)]
+pub struct AuthStatusResponse {
+    authenticated: bool,
 }
 
 // Handlers
@@ -228,8 +243,9 @@ pub async fn totp_verify(
 /// Login with acccount_id and TOTP code
 pub async fn login(
     State(state): State<AppState>,
+    jar: CookieJar,
     Json(payload): Json<LoginRequest>,
-) -> Result<Json<LoginResponse>, (StatusCode, String)> {
+) -> Result<(CookieJar, Json<LoginResponse>), (StatusCode, String)> {
     let account_id = payload.account_id;
     let code = payload.code;
 
@@ -296,11 +312,10 @@ pub async fn login(
 
     if !is_valid {
         tracing::warn!(account_id = %account_id, "Invalid TOTP code during login");
-        return Ok(Json(LoginResponse {
+        return Ok((jar, Json(LoginResponse {
             success: false,
             message: "Invalid code".to_string(),
-            token: None,
-        }));
+        })));
     }
 
     // Generate JWT token
@@ -312,11 +327,41 @@ pub async fn login(
         )
     })?;
 
+    // Create and set httpOnly cookie
+    let auth_cookie = crate::middleware::auth::create_auth_cookie(&token);
+    let jar = jar.add(auth_cookie);
+
     tracing::info!(account_id = %account_id, "Login successful");
 
-    Ok(Json(LoginResponse {
+    Ok((jar, Json(LoginResponse {
         success: true,
         message: "Login successful".to_string(),
-        token: Some(token),
-    }))
+    })))
+}
+
+/// POST /api/logout
+/// Logout by clearing the auth cookie
+pub async fn logout(
+    jar: CookieJar,
+) -> Result<(CookieJar, Json<LogoutResponse>), (StatusCode, String)> {
+    // Create cookie to clear auth token
+    let clear_cookie = crate::middleware::auth::create_clear_auth_cookie();
+    let jar = jar.add(clear_cookie);
+
+    tracing::info!("User logged out");
+
+    Ok((jar, Json(LogoutResponse {
+        success: true,
+        message: "Logout successful".to_string(),
+    })))
+}
+
+/// GET /api/auth/status
+/// Check if user is authenticated (has valid cookie)
+pub async fn auth_status(
+    user: Result<AuthenticatedUser, (StatusCode, String)>,
+) -> Json<AuthStatusResponse> {
+    Json(AuthStatusResponse {
+        authenticated: user.is_ok(),
+    })
 }

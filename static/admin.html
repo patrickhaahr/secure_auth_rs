@@ -44,14 +44,12 @@
     </div>
     
     <script>
-        function isTokenExpired() {
-            const expiresAt = localStorage.getItem("auth_token_expires");
-            return !expiresAt || Date.now() >= parseInt(expiresAt);
-        }
-
-        function logout() {
-            localStorage.removeItem("auth_token");
-            localStorage.removeItem("auth_token_expires");
+        async function logout() {
+            try {
+                await fetch("/api/logout", { method: "POST" });
+            } catch (error) {
+                console.error("Logout error:", error);
+            }
             window.location.href = "/login.html";
         }
 
@@ -76,7 +74,6 @@
         }
 
         async function fetchUsers() {
-            const token = localStorage.getItem("auth_token");
             const csrfToken = await getCsrfToken();
             
             if (!csrfToken) {
@@ -88,7 +85,6 @@
                 const response = await fetch("/api/admin/users", {
                     method: "GET",
                     headers: {
-                        "Authorization": `Bearer ${token}`,
                         "Content-Type": "application/json",
                         "X-CSRF-Token": csrfToken
                     }
@@ -179,7 +175,6 @@
                 return;
             }
 
-            const token = localStorage.getItem("auth_token");
             const csrfToken = await getCsrfToken();
             
             if (!csrfToken) {
@@ -191,7 +186,6 @@
                 const response = await fetch(`/api/admin/users/${accountId}`, {
                     method: "DELETE",
                     headers: {
-                        "Authorization": `Bearer ${token}`,
                         "Content-Type": "application/json",
                         "X-CSRF-Token": csrfToken
                     }
@@ -212,19 +206,10 @@
         }
 
         async function checkAdminAccess() {
-            const token = localStorage.getItem("auth_token");
-            const expired = isTokenExpired();
-            
-            if (!token || expired) {
-                window.location.href = "/login.html";
-                return;
-            }
-
             try {
                 const response = await fetch("/api/admin/check", {
                     method: "GET",
                     headers: {
-                        "Authorization": `Bearer ${token}`,
                         "Content-Type": "application/json"
                     }
                 });

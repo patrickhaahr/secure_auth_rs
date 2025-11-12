@@ -9,9 +9,11 @@ use axum::{
 use axum_extra::{
     TypedHeader,
     headers::{Authorization, authorization::Bearer},
+    extract::cookie::{CookieJar, Cookie},
 };
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
+use time::Duration;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
@@ -33,7 +35,7 @@ pub fn generate_token(account_id: &str) -> Result<String, jsonwebtoken::errors::
     });
 
     let now = chrono::Utc::now();
-    let exp = now + chrono::Duration::hours(24);
+    let exp = now + chrono::Duration::hours(1); // Shorter expiry for cookies
 
     let claims = Claims {
         sub: account_id.to_string(),
@@ -46,6 +48,28 @@ pub fn generate_token(account_id: &str) -> Result<String, jsonwebtoken::errors::
         &claims,
         &EncodingKey::from_secret(secret.as_bytes()),
     )
+}
+
+/// Create secure httpOnly cookie with JWT token
+pub fn create_auth_cookie(token: &str) -> Cookie<'static> {
+    Cookie::build(("auth_token", token.to_string()))
+        .http_only(true)
+        .secure(true) // HTTPS only
+        .same_site(axum_extra::extract::cookie::SameSite::Strict)
+        .max_age(Duration::hours(1)) // Match token expiry
+        .path("/")
+        .build()
+}
+
+/// Create cookie to clear auth token
+pub fn create_clear_auth_cookie() -> Cookie<'static> {
+    Cookie::build(("auth_token", "".to_string()))
+        .http_only(true)
+        .secure(true)
+        .same_site(axum_extra::extract::cookie::SameSite::Strict)
+        .max_age(Duration::seconds(-1)) // Expire immediately
+        .path("/")
+        .build()
 }
 
 /// Verify JWT token and extract claims
@@ -69,26 +93,51 @@ where
     type Rejection = (StatusCode, String);
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        // Extract Authorization header
-        let TypedHeader(Authorization(bearer)) = parts
+        // Try to extract token from Authorization header first (for backward compatibility)
+        if let Ok(TypedHeader(Authorization(bearer))) = parts
             .extract::<TypedHeader<Authorization<Bearer>>>()
+            .await
+        {
+            // Verify token from header
+            let claims = verify_token(bearer.token()).map_err(|e| {
+                tracing::warn!(error = %e, "Invalid JWT token from header");
+                (StatusCode::UNAUTHORIZED, "Invalid token".to_string())
+            })?;
+
+            return Ok(AuthenticatedUser {
+                account_id: claims.sub,
+            });
+        }
+
+        // Try to extract token from cookies
+        let cookies = parts
+            .extract::<CookieJar>()
             .await
             .map_err(|_| {
                 (
                     StatusCode::UNAUTHORIZED,
-                    "Missing or invalid authorization header".to_string(),
+                    "Missing authentication".to_string(),
                 )
             })?;
 
-        // Verify token
-        let claims = verify_token(bearer.token()).map_err(|e| {
-            tracing::warn!(error = %e, "Invalid JWT token");
-            (StatusCode::UNAUTHORIZED, "Invalid token".to_string())
-        })?;
+        if let Some(cookie) = cookies.get("auth_token") {
+            let token = cookie.value();
+            
+            // Verify token from cookie
+            let claims = verify_token(token).map_err(|e| {
+                tracing::warn!(error = %e, "Invalid JWT token from cookie");
+                (StatusCode::UNAUTHORIZED, "Invalid token".to_string())
+            })?;
 
-        Ok(AuthenticatedUser {
-            account_id: claims.sub,
-        })
+            Ok(AuthenticatedUser {
+                account_id: claims.sub,
+            })
+        } else {
+            Err((
+                StatusCode::UNAUTHORIZED,
+                "Missing authentication token".to_string(),
+            ))
+        }
     }
 }
 

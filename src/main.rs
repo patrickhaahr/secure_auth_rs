@@ -71,6 +71,7 @@ async fn main() {
     let rate_limited_routes = Router::new()
         .route("/api/login/totp/verify", post(routes::auth::totp_verify))
         .route("/api/login", post(routes::auth::login))
+        .route("/api/logout", post(routes::auth::logout))
         .layer(axum_middleware::from_fn(move |jar, req, next| {
             let limiter = rate_limiter.clone();
             async move { limiter.middleware(jar, req, next).await }
@@ -145,6 +146,7 @@ async fn main() {
     let app = Router::new()
         .route("/health", get(health_check))
         .route("/api/csrf-token", get(get_csrf_token))
+        .route("/api/auth/status", get(routes::auth::auth_status))
         .merge(rate_limited_routes)
         .merge(csrf_protected_routes)
         .merge(cpr_submission_route)

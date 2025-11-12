@@ -25,24 +25,21 @@
     </div>
     
     <script>
-        // Token lifecycle management
-        function isTokenExpired() {
-            const expiresAt = localStorage.getItem("auth_token_expires");
-            return !expiresAt || Date.now() > parseInt(expiresAt);
-        }
-
-        function logout() {
-            localStorage.removeItem("auth_token");
-            localStorage.removeItem("auth_token_expires");
+        async function logout() {
+            try {
+                await fetch("/api/logout", { method: "POST" });
+            } catch (error) {
+                console.error("Logout error:", error);
+            }
             window.location.href = "/login.html";
         }
 
-        function checkAuthStatus() {
+        async function checkAuthStatus() {
             try {
-                const token = localStorage.getItem("auth_token");
-                const expired = isTokenExpired();
+                const response = await fetch("/api/auth/status");
+                const data = await response.json();
                 
-                if (token && !expired) {
+                if (data.authenticated) {
                     // Show authenticated view
                     document.getElementById("unauth-view").style.display = "none";
                     document.getElementById("auth-view").style.display = "block";
@@ -64,15 +61,9 @@
                     // Show unauthenticated view
                     document.getElementById("unauth-view").style.display = "block";
                     document.getElementById("auth-view").style.display = "none";
-                    
-                    // Clear invalid tokens
-                    if (token) {
-                        localStorage.removeItem("auth_token");
-                        localStorage.removeItem("auth_token_expires");
-                    }
                 }
             } catch (e) {
-                console.error("Error accessing localStorage:", e);
+                console.error("Error checking auth status:", e);
                 document.getElementById("unauth-view").style.display = "block";
                 document.getElementById("auth-view").style.display = "none";
             }

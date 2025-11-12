@@ -92,29 +92,32 @@
             }
         }
 
-        // Token lifecycle management
-        function storeToken(token) {
-            const payload = JSON.parse(atob(token.split('.')[1]));
-            const expiresAt = payload.exp * 1000;
-            localStorage.setItem("auth_token_expires", expiresAt);
-            localStorage.setItem("auth_token", token);
+        // Check authentication status on page load
+        async function checkAuthStatus() {
+            try {
+                const response = await fetch("/api/auth/status");
+                const data = await response.json();
+                if (data.authenticated) {
+                    // User is authenticated, redirect to dashboard
+                    window.location.href = "/";
+                }
+            } catch (error) {
+                // User is not authenticated, stay on login page
+                console.log("User not authenticated");
+            }
         }
 
-        function isTokenExpired() {
-            const expiresAt = localStorage.getItem("auth_token_expires");
-            return !expiresAt || Date.now() > parseInt(expiresAt);
-        }
-
-        function logout() {
-            localStorage.removeItem("auth_token");
-            localStorage.removeItem("auth_token_expires");
+        async function logout() {
+            try {
+                await fetch("/api/logout", { method: "POST" });
+            } catch (error) {
+                console.error("Logout error:", error);
+            }
             window.location.href = "/login.html";
         }
 
-        // Check token on page load
-        if (!isTokenExpired() && localStorage.getItem("auth_token")) {
-            window.location.href = "/";
-        }
+        // Check auth status on page load
+        checkAuthStatus();
 
         document.getElementById("continueBtn").addEventListener("click", async () => {
             const accountId = document.getElementById("accountId").value.trim();
@@ -304,18 +307,8 @@
                 }
 
                 const loginData = await loginResponse.json();
-                if (loginData.success && loginData.token) {
-                    // Store JWT token for CPR submission
-                    storeToken(loginData.token);
-                    
-                    // Verify token was stored
-                    if (!localStorage.getItem("auth_token")) {
-                        alert("Failed to store authentication. Please refresh the page.");
-                        btn.disabled = false;
-                        return;
-                    }
-                    
-                    // Proceed to CPR step
+                if (loginData.success) {
+                    // Proceed to CPR step (cookie is set automatically)
                     document.getElementById("totpSetupStep").style.display = "none";
                     document.getElementById("cprStep").style.display = "block";
                 } else {
@@ -353,25 +346,16 @@
                   return;
               }
 
-              // Get JWT token from localStorage
-              const authToken = localStorage.getItem("auth_token");
-              if (!authToken) {
-                  alert("Authentication required. Please refresh and try again.");
-                  btn.disabled = false;
-                  return;
-              }
-
-              const response = await fetch("/api/account/cpr", {
-                method: "POST",
-                headers: { 
-                    "Content-Type": "application/json",
-                    "X-CSRF-Token": csrfToken,
-                    "Authorization": `Bearer ${authToken}`
-                },
-                body: JSON.stringify({ 
-                  account_id: currentAccountId,
-                  cpr: cpr })
-              });
+               const response = await fetch("/api/account/cpr", {
+                 method: "POST",
+                 headers: { 
+                     "Content-Type": "application/json",
+                     "X-CSRF-Token": csrfToken
+                 },
+                 body: JSON.stringify({ 
+                   account_id: currentAccountId,
+                   cpr: cpr })
+               });
 
               if (!response.ok) {
                   const errorText = await response.text();
@@ -470,20 +454,17 @@
                   return;
               }
 
-              const cprData = await cprResponse.json();
-              if (cprData.success) {
-                  // Store JWT token
-                  storeToken(loginData.token);
-                  
-                  // Show success message then redirect
-                  document.getElementById("unifiedLoginStep").style.display = "none";
-                  document.getElementById("success").style.display = "block";
-                  document.getElementById("successMsg").textContent = "Login successful! Redirecting...";
-                  setTimeout(() => window.location.href = "/", 2000);
-              } else {
-                  alert("Invalid CPR number");
-                  btn.disabled = false;
-              }
+               const cprData = await cprResponse.json();
+               if (cprData.success) {
+                   // Show success message then redirect (cookie is set automatically)
+                   document.getElementById("unifiedLoginStep").style.display = "none";
+                   document.getElementById("success").style.display = "block";
+                   document.getElementById("successMsg").textContent = "Login successful! Redirecting...";
+                   setTimeout(() => window.location.href = "/", 2000);
+               } else {
+                   alert("Invalid CPR number");
+                   btn.disabled = false;
+               }
           } catch (error) {
               alert(`Error: ${error.message}`);
               console.error("Unified login error:", error);
@@ -528,21 +509,17 @@
                   return;
               }
 
-              const data = await response.json();
-              if (data.success) {
-                // Store JWT token with expiry
-                if (data.token) {
-                    storeToken(data.token);
-                }
-                // Show success message then redirect
-                document.getElementById("loginStep").style.display = "none";
-                document.getElementById("success").style.display = "block";
-                document.getElementById("successMsg").textContent = "Login successful! Redirecting...";
-                setTimeout(() => window.location.href = "/", 2000);
-              } else {
-                  alert("Failed to login: " + data.message);
-                  btn.disabled = false;
-              }
+               const data = await response.json();
+               if (data.success) {
+                 // Show success message then redirect (cookie is set automatically)
+                 document.getElementById("loginStep").style.display = "none";
+                 document.getElementById("success").style.display = "block";
+                 document.getElementById("successMsg").textContent = "Login successful! Redirecting...";
+                 setTimeout(() => window.location.href = "/", 2000);
+               } else {
+                   alert("Failed to login: " + data.message);
+                   btn.disabled = false;
+               }
           } catch (error) {
               alert(`Error: ${error.message}`);
               console.error("Login error:", error);
