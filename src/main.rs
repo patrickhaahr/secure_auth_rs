@@ -5,6 +5,10 @@ use axum::{Router, routing::get};
 use sqlx::Pool;
 use sqlx::Sqlite;
 use std::sync::Arc;
+use tower_governor::{
+    governor::GovernorConfigBuilder, 
+    GovernorLayer,
+};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -25,9 +29,19 @@ async fn main() {
 
     let app_state = AppState { db: Arc::new(pool) };
 
-    // Create router
+    // Configure rate limiting: 10 requests per second with burst of 20
+    let governor_conf = Arc::new(
+        GovernorConfigBuilder::default()
+            .per_second(10)
+            .burst_size(20)
+            .finish()
+            .expect("Failed to build rate limiter configuration")
+    );
+
+    // Create router with rate limiting
     let app = Router::new()
         .route("/health", get(health_check))
+        .layer(GovernorLayer::new(governor_conf))
         .with_state(app_state);
 
     // Start server
