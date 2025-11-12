@@ -124,6 +124,19 @@ pub async fn cpr_hash_exists(pool: &Pool<Sqlite>, cpr_hash: &str) -> Result<bool
     Ok(result.0 > 0)
 }
 
+pub async fn has_cpr(pool: &Pool<Sqlite>, account_id: &str) -> Result<bool, sqlx::Error> {
+    let result: (i64,) = sqlx::query_as(
+        r#"
+            SELECT COUNT(*) FROM cpr_data WHERE account_id = ?
+            "#,
+    )
+    .bind(account_id)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(result.0 > 0)
+}
+
 // Passkey
 pub async fn insert_passkey(
     pool: &Pool<Sqlite>,

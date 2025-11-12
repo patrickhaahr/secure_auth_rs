@@ -77,11 +77,38 @@ async fn main() {
             async move { limiter.middleware(req, next).await }
         }));
 
-    // CSRF-protected routes (all POST routes)
+    // Authenticated routes that require CPR submission
+    // These routes are protected by CSRF + Auth + CPR verification
+    let cpr_protected_routes = Router::new()
+        // Future authenticated endpoints will go here
+        // Example: .route("/api/account/profile", get(routes::account::get_profile))
+        .layer(axum_middleware::from_fn_with_state(
+            app_state.clone(),
+            middleware::cpr::require_cpr,
+        ))
+        .layer(axum_middleware::from_fn({
+            let csrf = csrf_protection.clone();
+            move |req, next| {
+                let csrf = csrf.clone();
+                async move { csrf.middleware(req, next).await }
+            }
+        }));
+
+    // CPR submission route (requires CSRF + Auth, but NOT CPR check since this is how you submit CPR)
+    let cpr_submission_route = Router::new()
+        .route("/api/account/cpr", post(routes::account::submit_cpr))
+        .layer(axum_middleware::from_fn({
+            let csrf = csrf_protection.clone();
+            move |req, next| {
+                let csrf = csrf.clone();
+                async move { csrf.middleware(req, next).await }
+            }
+        }));
+
+    // CSRF-protected routes (all POST routes that don't require auth)
     let csrf_protected_routes = Router::new()
         .route("/api/signup", post(routes::auth::signup))
         .route("/api/login/totp/setup", post(routes::auth::totp_setup))
-        .route("/api/account/cpr", post(routes::account::submit_cpr))
         .layer(axum_middleware::from_fn(move |req, next| {
             let csrf = csrf_protection.clone();
             async move { csrf.middleware(req, next).await }
@@ -93,6 +120,8 @@ async fn main() {
         .route("/api/csrf-token", get(get_csrf_token))
         .merge(rate_limited_routes)
         .merge(csrf_protected_routes)
+        .merge(cpr_submission_route)
+        .merge(cpr_protected_routes)
         .fallback_service(ServeDir::new("static"))
         .with_state(app_state);
 

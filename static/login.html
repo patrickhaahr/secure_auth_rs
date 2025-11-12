@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - SecureAuth</title>
     <link rel="stylesheet" href="/styles.css">
+    <script src="/fingerprint.js"></script>
 </head>
 <body>
     <div class="container">
@@ -216,8 +217,43 @@
 
               const data = await response.json();
               if (data.verified) {
-                document.getElementById("totpSetupStep").style.display = "none";
-                document.getElementById("cprStep").style.display = "block";
+                // Automatically login to get JWT token for CPR submission
+                const loginCsrfToken = await getCsrfToken();
+                if (!loginCsrfToken) {
+                    alert("Failed to get security token. Please refresh the page.");
+                    btn.disabled = false;
+                    return;
+                }
+
+                const loginResponse = await fetch("/api/login", {
+                  method: "POST",
+                  headers: { 
+                      "Content-Type": "application/json",
+                      "X-CSRF-Token": loginCsrfToken
+                  },
+                  body: JSON.stringify({ account_id: currentAccountId, code: code })
+                });
+
+                if (!loginResponse.ok) {
+                    const errorText = await loginResponse.text();
+                    alert(`Login error: ${loginResponse.status} - ${errorText}`);
+                    console.error("Auto-login error:", errorText);
+                    btn.disabled = false;
+                    return;
+                }
+
+                const loginData = await loginResponse.json();
+                if (loginData.success && loginData.token) {
+                    // Store JWT token for CPR submission
+                    storeToken(loginData.token);
+                    
+                    // Proceed to CPR step
+                    document.getElementById("totpSetupStep").style.display = "none";
+                    document.getElementById("cprStep").style.display = "block";
+                } else {
+                    alert("Login failed after verification. Please try again.");
+                    btn.disabled = false;
+                }
               } else {
                 alert("Incorrect code!");
                 btn.disabled = false;
@@ -249,11 +285,20 @@
                   return;
               }
 
+              // Get JWT token from localStorage
+              const authToken = localStorage.getItem("auth_token");
+              if (!authToken) {
+                  alert("Authentication required. Please refresh and try again.");
+                  btn.disabled = false;
+                  return;
+              }
+
               const response = await fetch("/api/account/cpr", {
                 method: "POST",
                 headers: { 
                     "Content-Type": "application/json",
-                    "X-CSRF-Token": csrfToken
+                    "X-CSRF-Token": csrfToken,
+                    "Authorization": `Bearer ${authToken}`
                 },
                 body: JSON.stringify({ 
                   account_id: currentAccountId,
@@ -271,8 +316,9 @@
               const data = await response.json();
               if (data.success) {
                 document.getElementById("cprStep").style.display = "none";
-                document.getElementById("loginStep").style.display = "block";
-                document.getElementById("successMsg").textContent = "Setup complete! You can now login.";
+                document.getElementById("success").style.display = "block";
+                document.getElementById("successMsg").textContent = "Setup complete! Redirecting to dashboard...";
+                setTimeout(() => window.location.href = "/auth.html", 2000);
               } else {
                   alert("Failed to submit CPR: " + data.message);
                   btn.disabled = false;
