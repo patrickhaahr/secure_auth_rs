@@ -9,6 +9,7 @@ use tower_governor::{
     governor::GovernorConfigBuilder, 
     GovernorLayer,
 };
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -17,6 +18,15 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() {
+    // Initialize tracing/logging
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "secure_auth_rs=info,tower_governor=warn".into()),
+        )
+        .with(tracing_subscriber::fmt::layer())
+        .init();
+
     // Load environment variables
     dotenvy::dotenv().ok();
 
@@ -25,7 +35,7 @@ async fn main() {
         .await
         .expect("Failed to initialize database pool");
 
-    println!("✓ Database connected and migrations completed");
+    tracing::info!("Database connected and migrations completed");
 
     let app_state = AppState { db: Arc::new(pool) };
 
@@ -49,7 +59,7 @@ async fn main() {
         .await
         .expect("Failed to bind to port 3000");
 
-    println!("✓ Server running on http://127.0.0.1:3000");
+    tracing::info!("Server running on http://127.0.0.1:3000");
 
     axum::serve(listener, app).await.expect("Server failed");
 }

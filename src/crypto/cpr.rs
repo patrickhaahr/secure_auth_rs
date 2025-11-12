@@ -129,8 +129,12 @@ pub fn hash_cpr(cpr: &str) -> Result<String, CprHashError> {
     let cpr_bytes = Zeroizing::new(cpr.as_bytes().to_vec());
     let cpr_hash = argon2
         .hash_password(&cpr_bytes, &salt)
-        .map_err(|_| CprHashError::HashingFailed)?;
+        .map_err(|_| {
+            tracing::warn!("CPR hashing failed");
+            CprHashError::HashingFailed
+        })?;
 
+    tracing::info!("CPR hashed successfully");
     Ok(cpr_hash.to_string())
 }
 
@@ -162,14 +166,23 @@ pub fn verify_cpr(cpr: &str, hash: &str) -> Result<bool, CprHashError> {
 
     let argon2 = get_argon2_hasher()?;
 
-    let parsed_hash = PasswordHash::new(hash).map_err(|_| CprHashError::InvalidHash)?;
+    let parsed_hash = PasswordHash::new(hash).map_err(|_| {
+        tracing::warn!("Invalid CPR hash format provided for verification");
+        CprHashError::InvalidHash
+    })?;
 
     // Use Zeroizing to ensure CPR bytes are cleared from memory
     let cpr_bytes = Zeroizing::new(cpr.as_bytes().to_vec());
 
     match argon2.verify_password(&cpr_bytes, &parsed_hash) {
-        Ok(_) => Ok(true),
-        Err(_) => Ok(false),
+        Ok(_) => {
+            tracing::info!("CPR verification successful");
+            Ok(true)
+        }
+        Err(_) => {
+            tracing::warn!("CPR verification failed - incorrect CPR provided");
+            Ok(false)
+        }
     }
 }
 

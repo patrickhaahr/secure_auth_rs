@@ -10,11 +10,14 @@ use rand::distr::Alphanumeric;
 pub fn generate_account_id() -> String {
     use rand::rng;
 
-    rng()
+    let id: String = rng()
         .sample_iter(&Alphanumeric)
         .take(16)
         .map(char::from)
-        .collect()
+        .collect();
+
+    tracing::debug!("Generated new account ID");
+    id
 }
 
 #[cfg(test)]

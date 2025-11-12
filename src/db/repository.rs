@@ -6,7 +6,7 @@ pub async fn create_account(
     pool: &Pool<Sqlite>,
     id: &str,
 ) -> Result<Account, sqlx::Error> {
-    sqlx::query_as::<_, Account>(
+    let result = sqlx::query_as::<_, Account>(
         r#"
         INSERT INTO accounts (id, created_at)
         VALUES (?, datetime('now'))
@@ -15,7 +15,14 @@ pub async fn create_account(
     )
     .bind(id)
     .fetch_one(pool)
-    .await
+    .await;
+
+    match &result {
+        Ok(account) => tracing::info!(account_id = %account.id, "Account created"),
+        Err(e) => tracing::error!(account_id = %id, error = %e, "Failed to create account"),
+    }
+
+    result
 }
 
 pub async fn delete_account(pool: &Pool<Sqlite>, id: &str) -> Result<u64, sqlx::Error> {
@@ -28,7 +35,14 @@ pub async fn delete_account(pool: &Pool<Sqlite>, id: &str) -> Result<u64, sqlx::
     .execute(pool)
     .await?;
 
-    Ok(result.rows_affected())
+    let rows_affected = result.rows_affected();
+    if rows_affected > 0 {
+        tracing::info!(account_id = %id, "Account deleted");
+    } else {
+        tracing::warn!(account_id = %id, "Attempted to delete non-existent account");
+    }
+
+    Ok(rows_affected)
 }
 
 // Account Role
@@ -42,7 +56,10 @@ pub async fn is_admin(pool: &Pool<Sqlite>, account_id: &str) -> Result<bool, sql
     .fetch_optional(pool)
     .await?;
 
-    Ok(result.map(|r| r.0).unwrap_or(false))
+    let is_admin = result.map(|r| r.0).unwrap_or(false);
+    tracing::debug!(account_id = %account_id, is_admin = %is_admin, "Admin privilege check");
+
+    Ok(is_admin)
 }
 
 // CPR data
@@ -51,7 +68,7 @@ pub async fn insert_cpr_data(
     account_id: &str,
     cpr_hash: &str,
 ) -> Result<CprData, sqlx::Error> {
-    sqlx::query_as::<_, CprData>(
+    let result = sqlx::query_as::<_, CprData>(
         r#"
         INSERT INTO cpr_data (account_id, cpr_hash, verified_at)
         VALUES (?, ?, datetime('now'))
@@ -61,7 +78,14 @@ pub async fn insert_cpr_data(
     .bind(account_id)
     .bind(cpr_hash)
     .fetch_one(pool)
-    .await
+    .await;
+
+    match &result {
+        Ok(_) => tracing::info!(account_id = %account_id, "CPR data inserted and verified"),
+        Err(e) => tracing::error!(account_id = %account_id, error = %e, "Failed to insert CPR data"),
+    }
+
+    result
 }
 
 pub async fn cpr_hash_exists(pool: &Pool<Sqlite>, cpr_hash: &str) -> Result<bool, sqlx::Error> {
@@ -98,7 +122,7 @@ pub async fn insert_passkey(
     attestation_type: &str,
     nickname: Option<&str>,
 ) -> Result<Passkey, sqlx::Error> {
-    sqlx::query_as::<_, Passkey>(
+    let result = sqlx::query_as::<_, Passkey>(
         r#"
         INSERT INTO passkeys (
             id, account_id, credential_id, public_key, sign_count,
@@ -117,7 +141,23 @@ pub async fn insert_passkey(
     .bind(attestation_type)
     .bind(nickname)
     .fetch_one(pool)
-    .await
+    .await;
+
+    match &result {
+        Ok(passkey) => tracing::info!(
+            passkey_id = %passkey.id,
+            account_id = %account_id,
+            nickname = ?nickname,
+            "Passkey registered"
+        ),
+        Err(e) => tracing::error!(
+            account_id = %account_id,
+            error = %e,
+            "Failed to register passkey"
+        ),
+    }
+
+    result
 }
 
 pub async fn find_passkeys_by_account(
@@ -155,7 +195,18 @@ pub async fn update_passkey_usage(
     .bind(credential_id)
     .execute(pool)
     .await?;
-    Ok(result.rows_affected())
+
+    let rows_affected = result.rows_affected();
+    if rows_affected > 0 {
+        tracing::info!(
+            sign_count = %new_sign_count,
+            "Passkey used successfully"
+        );
+    } else {
+        tracing::warn!("Attempted to update non-existent passkey");
+    }
+
+    Ok(rows_affected)
 }
 
 pub async fn delete_passkey(pool: &Pool<Sqlite>, id: &str) -> Result<u64, sqlx::Error> {
@@ -167,7 +218,15 @@ pub async fn delete_passkey(pool: &Pool<Sqlite>, id: &str) -> Result<u64, sqlx::
     .bind(id)
     .execute(pool)
     .await?;
-    Ok(result.rows_affected())
+
+    let rows_affected = result.rows_affected();
+    if rows_affected > 0 {
+        tracing::info!(passkey_id = %id, "Passkey deleted");
+    } else {
+        tracing::warn!(passkey_id = %id, "Attempted to delete non-existent passkey");
+    }
+
+    Ok(rows_affected)
 }
 
 // TOTP Secret
@@ -176,7 +235,7 @@ pub async fn insert_totp_secret(
     account_id: &str,
     secret_encrypted: &[u8],
 ) -> Result<TotpSecret, sqlx::Error> {
-    sqlx::query_as::<_, TotpSecret>(
+    let result = sqlx::query_as::<_, TotpSecret>(
         r#"
         INSERT INTO totp_secrets (
             account_id, secret_encrypted, algorithm, 
@@ -190,7 +249,14 @@ pub async fn insert_totp_secret(
     .bind(account_id)
     .bind(secret_encrypted)
     .fetch_one(pool)
-    .await
+    .await;
+
+    match &result {
+        Ok(_) => tracing::info!(account_id = %account_id, "TOTP secret created (unverified)"),
+        Err(e) => tracing::error!(account_id = %account_id, error = %e, "Failed to create TOTP secret"),
+    }
+
+    result
 }
 
 pub async fn verify_totp(pool: &Pool<Sqlite>, account_id: &str) -> Result<u64, sqlx::Error> {
@@ -204,7 +270,15 @@ pub async fn verify_totp(pool: &Pool<Sqlite>, account_id: &str) -> Result<u64, s
     .bind(account_id)
     .execute(pool)
     .await?;
-    Ok(result.rows_affected())
+
+    let rows_affected = result.rows_affected();
+    if rows_affected > 0 {
+        tracing::info!(account_id = %account_id, "TOTP verified with valid code");
+    } else {
+        tracing::warn!(account_id = %account_id, "Attempted to verify non-existent TOTP");
+    }
+
+    Ok(rows_affected)
 }
 
 pub async fn delete_totp_secret(pool: &Pool<Sqlite>, account_id: &str) -> Result<u64, sqlx::Error> {
@@ -216,5 +290,13 @@ pub async fn delete_totp_secret(pool: &Pool<Sqlite>, account_id: &str) -> Result
     .bind(account_id)
     .execute(pool)
     .await?;
-    Ok(result.rows_affected())
+
+    let rows_affected = result.rows_affected();
+    if rows_affected > 0 {
+        tracing::info!(account_id = %account_id, "TOTP secret deleted");
+    } else {
+        tracing::warn!(account_id = %account_id, "Attempted to delete non-existent TOTP secret");
+    }
+
+    Ok(rows_affected)
 }
