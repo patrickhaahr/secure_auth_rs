@@ -19,12 +19,29 @@
             <button id="setupTotpBtn">Setup TOTP</button>
         </div>
         <div id="totpSetupStep" style="display:none;">
-            <h2>Scan QR Code</h2>
+            <h2>Setup Two-Factor Authentication</h2>
+            
+            <h3>Option 1: Scan QR Code</h3>
             <div id="qrContainer">
                 <img id="qrImage" alt="QR Code" style="display:none;">
                 <p id="qrUri" style="display:none;"></p>
             </div>
-            <p>Secret: <code id="secret" style="cursor:pointer;" title="Click to reveal">••••••••••••••••</code></p>
+            
+            <h3>Option 2: Manual Entry</h3>
+            <div class="manual-entry-box">
+                <p><strong>Account/Label:</strong> <code id="accountLabel"></code></p>
+                <p><strong>Secret Key:</strong> <code id="secret" style="cursor:pointer;" title="Click to reveal">••••••••••••••••</code></p>
+                <p><strong>Algorithm:</strong> SHA512</p>
+                <p><strong>Digits:</strong> 6</p>
+                <p><strong>Period:</strong> 30 seconds</p>
+                <details style="margin-top:10px;">
+                    <summary style="color:#4a9eff;">Show full otpauth:// URI</summary>
+                    <p style="word-break:break-all; margin-top:8px;">
+                        <code id="otpauthUri" style="font-size:11px; word-break:break-all; display:block;"></code>
+                    </p>
+                </details>
+            </div>
+            
             <br>
             <label>Enter 6-digit code to verify:</label>
             <input type="text" id="verifyCode" placeholder="123456" maxlength="6">
@@ -136,6 +153,7 @@
               totpSecretData = data.secret; // Store in memory only
               
               console.log("QR URI received:", data.qr_uri.substring(0, 50));
+              console.log("OTPAuth URI received:", data.otpauth_uri);
               
               // Render QR code as image
               const qrImage = document.getElementById("qrImage");
@@ -153,6 +171,10 @@
                   qrUri.style.display = "block";
                   qrImage.style.display = "none";
               }
+
+              // Populate manual entry fields
+              document.getElementById("accountLabel").textContent = currentAccountId;
+              document.getElementById("otpauthUri").textContent = data.otpauth_uri;
 
               // Setup secret reveal handler
               const secretElem = document.getElementById("secret");
@@ -245,6 +267,13 @@
                 if (loginData.success && loginData.token) {
                     // Store JWT token for CPR submission
                     storeToken(loginData.token);
+                    
+                    // Verify token was stored
+                    if (!localStorage.getItem("auth_token")) {
+                        alert("Failed to store authentication. Please refresh the page.");
+                        btn.disabled = false;
+                        return;
+                    }
                     
                     // Proceed to CPR step
                     document.getElementById("totpSetupStep").style.display = "none";

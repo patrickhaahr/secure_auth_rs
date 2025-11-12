@@ -29,6 +29,7 @@ pub struct TotpSetupRequest {
 pub struct TotpSetupResponse {
     secret: String,
     qr_uri: String,
+    otpauth_uri: String,
 }
 
 #[derive(Deserialize)]
@@ -122,7 +123,7 @@ pub async fn totp_setup(
             )
         })?;
 
-    // Generate QR code URI
+    // Generate QR code image (base64 data URI)
     let qr_uri = totp::generate_qr_uri(&secret, &account_id, "SecureAuthRS").map_err(|e| {
         tracing::error!(error = %e, "Failed to generate QR code URI");
         (
@@ -131,9 +132,18 @@ pub async fn totp_setup(
         )
     })?;
 
+    // Generate otpauth:// URI for manual entry
+    let otpauth_uri = totp::generate_otpauth_uri(&secret, &account_id, "SecureAuthRS").map_err(|e| {
+        tracing::error!(error = %e, "Failed to generate otpauth URI");
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to generate otpauth URI".to_string(),
+        )
+    })?;
+
     tracing::info!(account_id = %account_id, "TOTP setup completed");
 
-    Ok(Json(TotpSetupResponse { secret, qr_uri }))
+    Ok(Json(TotpSetupResponse { secret, qr_uri, otpauth_uri }))
 }
 
 /// POST /api/login/totp/verify

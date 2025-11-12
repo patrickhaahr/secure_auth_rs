@@ -176,3 +176,46 @@ code {
 [style*="color:green"] {
     color: #4ade80 !important;
 }
+
+h3 {
+    font-size: 16px;
+    font-weight: 500;
+    margin-top: 20px;
+    margin-bottom: 12px;
+    color: #ffffff;
+}
+
+details {
+    cursor: pointer;
+}
+
+details summary {
+    padding: 8px;
+    user-select: none;
+}
+
+details summary:hover {
+    background-color: #2a2a2a;
+    border-radius: 4px;
+}
+
+.manual-entry-box {
+    background-color: #0a0a0a;
+    padding: 15px;
+    border-radius: 5px;
+    margin: 10px 0;
+    border: 1px solid #2a2a2a;
+}
+
+.manual-entry-box p {
+    margin-bottom: 8px;
+}
+
+.manual-entry-box strong {
+    color: #d0d0d0;
+}
+
+.manual-entry-box code {
+    display: inline-block;
+    max-width: 100%;
+}

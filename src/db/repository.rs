@@ -125,6 +125,10 @@ pub async fn cpr_hash_exists(pool: &Pool<Sqlite>, cpr_hash: &str) -> Result<bool
 }
 
 pub async fn has_cpr(pool: &Pool<Sqlite>, account_id: &str) -> Result<bool, sqlx::Error> {
+    use tokio::time::{sleep, Duration, Instant};
+
+    let start = Instant::now();
+    
     let result: (i64,) = sqlx::query_as(
         r#"
             SELECT COUNT(*) FROM cpr_data WHERE account_id = ?
@@ -133,6 +137,12 @@ pub async fn has_cpr(pool: &Pool<Sqlite>, account_id: &str) -> Result<bool, sqlx
     .bind(account_id)
     .fetch_one(pool)
     .await?;
+
+    // Ensure minimum 50ms response time to prevent timing attacks
+    let elapsed = start.elapsed();
+    if elapsed < Duration::from_millis(50) {
+        sleep(Duration::from_millis(50) - elapsed).await;
+    }
 
     Ok(result.0 > 0)
 }

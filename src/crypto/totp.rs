@@ -316,6 +316,51 @@ pub fn verify_totp_code(secret: &str, code: &str) -> Result<bool, TotpError> {
     Ok(is_valid)
 }
 
+/// Generates an otpauth:// URI for manual TOTP setup
+///
+/// # Arguments
+/// * `secret` - Base32-encoded TOTP secret
+/// * `account_id` - Account identifier
+/// * `issuer` - Service name (e.g. Authenticator App)
+///
+/// # Returns
+/// otpauth:// URI string for manual entry
+///
+/// # Example
+/// ```rust
+/// let uri = generate_otpauth_uri("JBSWY3DPEHPK3PXP", "A1B2C3D4E5F6G7H8", "AuthApp");
+/// // Returns: "otpauth://totp/AuthApp:A1B2C3D4E5F6G7H8?secret=JBSWY3DPEHPK3PXP&issuer=AuthApp&algorithm=SHA512"
+/// ```
+pub fn generate_otpauth_uri(secret: &str, account_id: &str, issuer: &str) -> Result<String, TotpError> {
+    // Parse the base32 secret
+    let secret_enum = Secret::Encoded(secret.to_string());
+    let secret_bytes = secret_enum.to_bytes().map_err(|_| {
+        tracing::error!("Failed to decode base32 TOTP secret");
+        TotpError::InvalidSecret
+    })?;
+
+    // Create TOTP instance with SHA512 to match our code generation/verification
+    let totp = TOTP::new(
+        Algorithm::SHA512,
+        6,
+        1,
+        30,
+        secret_bytes,
+        Some(issuer.to_string()),
+        account_id.to_string(),
+    )
+    .map_err(|e| {
+        tracing::error!("Failed to create TOTP instance: {}", e);
+        TotpError::TotpCreationFailed(e.to_string())
+    })?;
+
+    // Get the otpauth URI
+    let uri = totp.get_url();
+
+    tracing::debug!("Generated TOTP otpauth URI for account {}", account_id);
+    Ok(uri)
+}
+
 /// Generates a base64-encoded QR code image as a data URI
 ///
 /// # Arguments
@@ -514,7 +559,48 @@ mod tests {
         let account_id = "A1B2C3D4E5F6G7H8";
         let issuer = "AuthApp";
 
-        let uri = generate_qr_uri(&secret, account_id, issuer).expect("URI generation failed");
+        let data_uri = generate_qr_uri(&secret, account_id, issuer).expect("URI generation failed");
+
+        // Verify data URI format (base64-encoded PNG)
+        assert!(
+            data_uri.starts_with("data:image/png;base64,"),
+            "Should be a base64-encoded PNG data URI"
+        );
+        
+        // Verify it's a valid base64 string after the prefix
+        let base64_part = data_uri.strip_prefix("data:image/png;base64,").unwrap();
+        assert!(!base64_part.is_empty(), "Base64 data should not be empty");
+        
+        // Verify it contains valid base64 characters
+        assert!(
+            base64_part.chars().all(|c| c.is_alphanumeric() || c == '+' || c == '/' || c == '='),
+            "Should contain valid base64 characters"
+        );
+    }
+
+    #[test]
+    fn test_generate_qr_uri_with_special_characters() {
+        let secret = generate_totp_secret();
+        let account_id = "test+user@example.com";
+        let issuer = "My App & Service";
+
+        let data_uri = generate_qr_uri(&secret, account_id, issuer).expect("URI generation failed");
+
+        // Should be a valid data URI (base64-encoded PNG)
+        assert!(data_uri.starts_with("data:image/png;base64,"), "Should be a base64-encoded PNG data URI");
+        
+        // Verify it's not empty
+        let base64_part = data_uri.strip_prefix("data:image/png;base64,").unwrap();
+        assert!(!base64_part.is_empty(), "Base64 data should not be empty");
+    }
+
+    #[test]
+    fn test_generate_otpauth_uri_format() {
+        let secret = generate_totp_secret();
+        let account_id = "A1B2C3D4E5F6G7H8";
+        let issuer = "AuthApp";
+
+        let uri = generate_otpauth_uri(&secret, account_id, issuer).expect("URI generation failed");
 
         // Verify otpauth URI format
         assert!(
@@ -525,18 +611,15 @@ mod tests {
         assert!(uri.contains(account_id), "URI should contain account ID");
         assert!(uri.contains(issuer), "URI should contain issuer");
         assert!(uri.contains("algorithm=SHA512"), "URI should specify SHA512");
-        
-        // Note: totp-rs omits digits and period parameters when they're RFC defaults (6 and 30)
-        // This is correct behavior - authenticator apps will use defaults if not specified
     }
 
     #[test]
-    fn test_generate_qr_uri_with_special_characters() {
+    fn test_generate_otpauth_uri_with_special_characters() {
         let secret = generate_totp_secret();
         let account_id = "test+user@example.com";
         let issuer = "My App & Service";
 
-        let uri = generate_qr_uri(&secret, account_id, issuer).expect("URI generation failed");
+        let uri = generate_otpauth_uri(&secret, account_id, issuer).expect("URI generation failed");
 
         // URL encoding should be handled by totp-rs
         assert!(uri.starts_with("otpauth://totp/"), "URI should be valid otpauth URL");
@@ -578,23 +661,23 @@ mod tests {
 
     #[test]
     fn test_full_flow_qr_uri_to_code_verification() {
-        // Full flow: generate secret -> create QR URI -> extract secret -> verify code
+        // Full flow: generate secret -> create otpauth URI -> extract secret -> verify code
         let secret = generate_totp_secret();
         let account_id = "test_account";
         let issuer = "TestApp";
 
-        // Generate QR URI
-        let uri = generate_qr_uri(&secret, account_id, issuer).expect("URI generation failed");
+        // Generate otpauth URI
+        let uri = generate_otpauth_uri(&secret, account_id, issuer).expect("URI generation failed");
 
-        // Verify URI contains the secret (simulating QR code scan)
-        assert!(uri.contains(&secret), "QR URI should contain the secret");
+        // Verify URI contains the secret (simulating manual entry or QR scan)
+        assert!(uri.contains(&secret), "OTPAuth URI should contain the secret");
 
         // Generate code using the same secret
         let code = generate_totp_code(&secret).expect("Code generation failed");
 
         // Verify the code (simulating user entering code from authenticator app)
         let is_valid = verify_totp_code(&secret, &code).expect("Verification failed");
-        assert!(is_valid, "Code should verify after QR URI generation");
+        assert!(is_valid, "Code should verify after otpauth URI generation");
     }
 
     #[test]
@@ -610,10 +693,13 @@ mod tests {
         // 2. Encrypt secret for storage
         let encrypted = encrypt_totp_secret(&secret, &key).expect("Encryption failed");
 
-        // 3. Generate QR URI for user enrollment
-        let qr_uri = generate_qr_uri(&secret, account_id, issuer).expect("QR generation failed");
-        assert!(qr_uri.contains(&secret), "QR should contain secret");
-        assert!(qr_uri.contains("algorithm=SHA512"), "QR should specify SHA512");
+        // 3. Generate QR data URI and otpauth URI for user enrollment
+        let qr_data_uri = generate_qr_uri(&secret, account_id, issuer).expect("QR generation failed");
+        assert!(qr_data_uri.starts_with("data:image/png;base64,"), "QR should be base64 PNG data URI");
+        
+        let otpauth_uri = generate_otpauth_uri(&secret, account_id, issuer).expect("OTPAuth URI generation failed");
+        assert!(otpauth_uri.contains(&secret), "OTPAuth URI should contain secret");
+        assert!(otpauth_uri.contains("algorithm=SHA512"), "OTPAuth URI should specify SHA512");
 
         // 4. Simulate time passing - decrypt secret from storage
         let decrypted = decrypt_totp_secret(&encrypted, &key).expect("Decryption failed");
