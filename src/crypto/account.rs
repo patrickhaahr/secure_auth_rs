@@ -14,6 +14,7 @@ pub fn generate_account_id() -> String {
         .sample_iter(&Alphanumeric)
         .take(16)
         .map(char::from)
+        .map(|c| c.to_ascii_uppercase())
         .collect();
 
     tracing::debug!("Generated new account ID");
@@ -35,8 +36,8 @@ mod tests {
     fn test_generate_account_id_alphanumeric() {
         let id = generate_account_id();
         assert!(
-            id.chars().all(|c| c.is_ascii_alphanumeric()),
-            "Account ID must only contain alphanumeric characters"
+            id.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit()),
+            "Account ID must only contain uppercase letters and digits"
         );
     }
 
