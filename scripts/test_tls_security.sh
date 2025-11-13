@@ -3,7 +3,13 @@
 # TLS Security Test Suite
 # Tests all security validations for HTTPS implementation
 
-set -e
+# Don't use set -e because tests are expected to fail
+set +e
+
+# Change to project root directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+cd "$PROJECT_ROOT" || exit 1
 
 echo "🔒 TLS Security Test Suite for secure_auth_rs"
 echo "=============================================="
@@ -26,12 +32,17 @@ run_test() {
     
     echo -n "Testing: $test_name... "
     
-    if eval "$test_cmd" 2>&1 | grep -q "$expected_pattern"; then
+    # Filter out cargo warnings and only check actual output
+    local output=$(eval "$test_cmd" 2>&1 | grep -v "warning:" | grep -v -- "-->" | grep -v "^[0-9][0-9]" | grep -v "^ *|")
+    
+    if echo "$output" | grep -q "$expected_pattern"; then
         echo -e "${GREEN}✓ PASSED${NC}"
         ((TESTS_PASSED++))
         return 0
     else
         echo -e "${RED}✗ FAILED${NC}"
+        echo "  Expected: $expected_pattern"
+        echo "  Got: $(echo "$output" | head -3)"
         ((TESTS_FAILED++))
         return 1
     fi
@@ -58,7 +69,7 @@ run_test "Rejects missing certificate file" \
 echo ""
 echo "3. Invalid Private Key Tests"
 run_test "Rejects invalid private key data" \
-    "echo 'INVALID' > /tmp/bad_key.pem && TLS_KEY_PATH=/tmp/bad_key.pem timeout 2 cargo run 2>&1" \
+    "mkdir -p /tmp/test_tls && echo 'INVALID' > /tmp/test_tls/bad_key.pem && cp certs/.key_password /tmp/test_tls/ && TLS_KEY_PATH=/tmp/test_tls/bad_key.pem timeout 2 cargo run 2>&1" \
     "No private keys found in PEM file"
 
 run_test "Rejects missing private key file" \

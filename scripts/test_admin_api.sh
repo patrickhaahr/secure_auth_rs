@@ -13,7 +13,7 @@ for cmd in curl jq; do
     fi
 done
 
-BASE_URL="http://127.0.0.1:3000"
+BASE_URL="https://127.0.0.1:3443"
 CSRF_TOKEN=""
 
 # Colors for output
@@ -32,7 +32,7 @@ print_error() {
 
 # Get CSRF token
 get_csrf_token() {
-    CSRF_TOKEN=$(curl -s -X GET "${BASE_URL}/api/csrf-token" | jq -r '.csrf_token')
+    CSRF_TOKEN=$(curl -k -s -X GET "${BASE_URL}/api/csrf-token" | jq -r '.csrf_token')
     if [ "$CSRF_TOKEN" = "null" ] || [ -z "$CSRF_TOKEN" ]; then
         echo "Error: Failed to get CSRF token" >&2
         return 1
@@ -55,7 +55,7 @@ extract_body() {
 # Test unauthenticated access
 test_unauthenticated() {
     echo -n "GET /api/admin/users (unauth): "
-    response=$(curl -s -w "\n%{http_code}" -X GET "${BASE_URL}/api/admin/users" \
+    response=$(curl -k -s -w "\n%{http_code}" -X GET "${BASE_URL}/api/admin/users" \
         -H "Content-Type: application/json")
     http_code=$(extract_http_status "$response")
     
@@ -66,7 +66,7 @@ test_unauthenticated() {
     fi
     
     echo -n "DELETE /api/admin/users/test-id (unauth): "
-    response=$(curl -s -w "\n%{http_code}" -X DELETE "${BASE_URL}/api/admin/users/test-id" \
+    response=$(curl -k -s -w "\n%{http_code}" -X DELETE "${BASE_URL}/api/admin/users/test-id" \
         -H "Content-Type: application/json")
     http_code=$(extract_http_status "$response")
     
@@ -84,7 +84,7 @@ test_invalid_token() {
         print_error
         return
     fi
-    response=$(curl -s -w "\n%{http_code}" -X GET "${BASE_URL}/api/admin/users" \
+    response=$(curl -k -s -w "\n%{http_code}" -X GET "${BASE_URL}/api/admin/users" \
         -H "Content-Type: application/json" \
         -H "Authorization: Bearer invalid_token_12345" \
         -H "X-CSRF-Token: $CSRF_TOKEN")
@@ -101,7 +101,7 @@ test_invalid_token() {
         print_error
         return
     fi
-    response=$(curl -s -w "\n%{http_code}" -X DELETE "${BASE_URL}/api/admin/users/test-id" \
+    response=$(curl -k -s -w "\n%{http_code}" -X DELETE "${BASE_URL}/api/admin/users/test-id" \
         -H "Content-Type: application/json" \
         -H "Authorization: Bearer invalid_token_12345" \
         -H "X-CSRF-Token: $CSRF_TOKEN")
@@ -117,7 +117,7 @@ test_invalid_token() {
 # Test CSRF protection
 test_csrf_protection() {
     echo -n "GET /api/admin/users (no CSRF): "
-    response=$(curl -s -w "\n%{http_code}" -X GET "${BASE_URL}/api/admin/users" \
+    response=$(curl -k -s -w "\n%{http_code}" -X GET "${BASE_URL}/api/admin/users" \
         -H "Content-Type: application/json" \
         -H "Authorization: Bearer dummy_token")
     http_code=$(extract_http_status "$response")
@@ -132,7 +132,7 @@ test_csrf_protection() {
 # Test admin check endpoint
 test_admin_check() {
     echo -n "GET /api/admin/check (unauth): "
-    response=$(curl -s -w "\n%{http_code}" -X GET "${BASE_URL}/api/admin/check" \
+    response=$(curl -k -s -w "\n%{http_code}" -X GET "${BASE_URL}/api/admin/check" \
         -H "Content-Type: application/json")
     http_code=$(extract_http_status "$response")
     
@@ -143,7 +143,7 @@ test_admin_check() {
     fi
     
     echo -n "GET /api/admin/check (invalid token): "
-    response=$(curl -s -w "\n%{http_code}" -X GET "${BASE_URL}/api/admin/check" \
+    response=$(curl -k -s -w "\n%{http_code}" -X GET "${BASE_URL}/api/admin/check" \
         -H "Content-Type: application/json" \
         -H "Authorization: Bearer invalid_token")
     http_code=$(extract_http_status "$response")
@@ -158,7 +158,7 @@ test_admin_check() {
 # Main execution
 main() {
     # Check if server is running
-    if ! curl -s "${BASE_URL}/health" > /dev/null; then
+    if ! curl -k -s "${BASE_URL}/health" > /dev/null; then
         echo "FAIL: Server not running at $BASE_URL"
         exit 1
     fi

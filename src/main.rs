@@ -2,6 +2,7 @@ mod crypto;
 mod db;
 mod middleware;
 mod routes;
+mod tls;
 
 use axum::{
     Json, Router,
@@ -155,19 +156,41 @@ async fn main() {
         .fallback_service(ServeDir::new("static"))
         .with_state(app_state);
 
-    // Start server with ConnectInfo to extract client IP
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
+    // Load TLS configuration from environment
+    let bind_addr = std::env::var("BIND_ADDRESS").unwrap_or_else(|_| "127.0.0.1".to_string());
+    let https_port = std::env::var("HTTPS_PORT")
+        .unwrap_or_else(|_| "3443".to_string())
+        .parse::<u16>()
+        .expect("HTTPS_PORT must be a valid port number");
+
+    let cert_path =
+        std::env::var("TLS_CERT_PATH").expect("TLS_CERT_PATH environment variable required");
+    let key_path =
+        std::env::var("TLS_KEY_PATH").expect("TLS_KEY_PATH environment variable required");
+    let key_password = std::env::var("TLS_KEY_PASSWORD")
+        .expect("TLS_KEY_PASSWORD environment variable required");
+
+    // Load and validate TLS configuration
+    let tls_config = tls::load_tls_config(&cert_path, &key_path, &key_password)
         .await
-        .expect("Failed to bind to port 3000");
+        .expect("Failed to load TLS configuration - server will not start with invalid certificates");
 
-    tracing::info!("Server running on http://127.0.0.1:3000");
+    let addr: std::net::SocketAddr = format!("{}:{}", bind_addr, https_port)
+        .parse()
+        .expect("Invalid bind address or port");
 
-    axum::serve(
-        listener,
-        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
-    )
-    .await
-    .expect("Server failed");
+    tracing::info!(
+        "🔒 HTTPS server starting on https://{}:{}",
+        bind_addr,
+        https_port
+    );
+    tracing::info!("✓ TLS certificates validated successfully");
+
+    // Start HTTPS server with TLS
+    axum_server::bind_rustls(addr, tls_config)
+        .serve(app.into_make_service_with_connect_info::<std::net::SocketAddr>())
+        .await
+        .expect("Server failed");
 }
 
 async fn health_check() -> &'static str {

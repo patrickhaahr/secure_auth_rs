@@ -29,3 +29,6 @@ time = "0.3.36"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 zeroize = { version = "1.8.2", features = ["derive"] }
+rustls = "0.23"
+rustls-pemfile = "2.1"
+axum-server = { version = "0.7", features = ["tls-rustls"] }

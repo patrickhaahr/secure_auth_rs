@@ -4,12 +4,19 @@
 
 set -e
 
+# Change to project root directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+cd "$PROJECT_ROOT" || exit 1
+
 CERTS_DIR="certs"
 CERT_FILE="$CERTS_DIR/cert.pem"
 KEY_FILE="$CERTS_DIR/key.pem"
 KEY_PASSWORD_FILE="$CERTS_DIR/.key_password"
 
 echo "🔐 Generating password-protected TLS certificates for secure_auth_rs"
+echo "Working directory: $PROJECT_ROOT"
+echo ""
 
 # Create certs directory
 mkdir -p "$CERTS_DIR"

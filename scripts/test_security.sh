@@ -12,10 +12,10 @@ for cmd in curl jq; do
   fi
 done
 
-BASE_URL="http://127.0.0.1:3000"
+BASE_URL="https://127.0.0.1:3443"
 
 # Validate that the API is reachable
-if ! curl -s --max-time 2 "$BASE_URL" > /dev/null 2>&1; then
+if ! curl -k -s --max-time 2 "$BASE_URL" > /dev/null 2>&1; then
   echo "✗ FAILED: Could not reach API at $BASE_URL"
   echo "Please ensure the server is running"
   exit 1
@@ -30,7 +30,7 @@ echo ""
 TEMP_FILE=$(mktemp)
 
 # Get CSRF token
-CSRF_TOKEN=$(curl -s "$BASE_URL/api/csrf-token" | jq -r '.csrf_token')
+CSRF_TOKEN=$(curl -k -s "$BASE_URL/api/csrf-token" | jq -r '.csrf_token')
 if [ -z "$CSRF_TOKEN" ] || [ "$CSRF_TOKEN" = "null" ]; then
   echo "✗ FAILED: Could not retrieve CSRF token"
   echo "Server response may be malformed or endpoint unavailable"
@@ -38,7 +38,7 @@ if [ -z "$CSRF_TOKEN" ] || [ "$CSRF_TOKEN" = "null" ]; then
 fi
 
 # Try to submit CPR without JWT token using reliable parsing
-response=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/api/account/cpr" \
+response=$(curl -k -s -w "\n%{http_code}" -X POST "$BASE_URL/api/account/cpr" \
   -H "Content-Type: application/json" \
   -H "X-CSRF-Token: $CSRF_TOKEN" \
   -d '{"account_id":"testaccount1234","cpr":"010190-1234"}')
