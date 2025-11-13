@@ -117,7 +117,42 @@
 - JWT token is issued (check browser storage)
 - Session is established correctly
 
-== 4. Security Testing
+== 4. Admin Account Setup
+
+=== Step 1: Grant Admin Role via SQLite
+1. Open terminal/CLI on the system running the application
+2. Navigate to the application directory
+3. Run the following command (replace `ACCOUNTID_CHANGE_ME` with your Account ID):
+
+``` sqlite3 auth.db "INSERT INTO account_roles (account_id, is_admin) VALUES ('ACCOUNTID_CHANGE_ME', 1) ON CONFLICT(account_id) DO UPDATE SET is_admin = 1;"` ```
+
+4. Verify command executes without errors
+
+=== Step 2: Access Admin Panel
+1. Log out of the application (if already logged in)
+2. Clear browser cache and cookies
+3. Log in again with your verified account credentials (TOTP + CPR)
+4. Click "Admin Panel" button
+5. Verify admin dashboard loads successfully
+6. Verify user list is displayed with all registered accounts
+
+=== Step 3: Admin User Management
+1. Verify page shows list of all users
+2. Locate a test user in the list
+3. Click "Delete User" button next to the test user
+4. Confirm deletion when prompted
+5. Verify user is removed from the list
+6. Verify deletion is permanent (user cannot log in after deletion)
+
+=== Expected Results
+- Admin role is successfully assigned via SQLite command
+- Admin panel is accessible after re-login and cache clear
+- User list displays all accounts with delete functionality
+- User deletion works correctly and persists
+- Deleted user accounts cannot authenticate
+
+
+== 5. Security Testing
 
 === CSRF Protection
 1. Login to the application
