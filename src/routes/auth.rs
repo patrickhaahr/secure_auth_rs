@@ -55,6 +55,8 @@ pub struct LoginRequest {
 pub struct LoginResponse {
     success: bool,
     message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    token: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -215,13 +217,18 @@ pub async fn totp_verify(
         })?;
 
     // Verify TOTP code
-    totp::verify_totp_code(&secret, &code).map_err(|e| {
+    let is_valid = totp::verify_totp_code(&secret, &code).map_err(|e| {
         tracing::error!(error = %e, "TOTP verification error");
         (
             StatusCode::INTERNAL_SERVER_ERROR,
             "Verification failed".to_string(),
         )
     })?;
+
+    if !is_valid {
+        tracing::warn!(account_id = %account_id, "Invalid TOTP code during verification");
+        return Ok(Json(TotpVerifyResponse { verified: false }));
+    }
 
     // Mark TOTP as verified
     repository::verify_totp(&state.db, &account_id)
@@ -315,6 +322,7 @@ pub async fn login(
         return Ok((jar, Json(LoginResponse {
             success: false,
             message: "Invalid code".to_string(),
+            token: None,
         })));
     }
 
@@ -336,6 +344,7 @@ pub async fn login(
     Ok((jar, Json(LoginResponse {
         success: true,
         message: "Login successful".to_string(),
+        token: Some(token),
     })))
 }
 

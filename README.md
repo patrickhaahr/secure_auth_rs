@@ -102,4 +102,6 @@ sqlx migrate run
 ### Admin
 ```bash
 sqlite3 auth.db "SELECT account_id, is_admin, assigned_at FROM account_roles WHERE account_id = 'EWCs3zDkrg8aTYz1';"
+
+sqlite3 auth.db "INSERT INTO account_roles (account_id, is_admin) VALUES ('HLISi0UKcrd0sfbN', 1) ON CONFLICT(account_id) DO UPDATE SET is_admin = 1;"
 ```

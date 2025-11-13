@@ -357,7 +357,7 @@ pub async fn insert_totp_secret(
             account_id, secret_encrypted, algorithm, 
             digits, period, is_verified, created_at
         )
-        VALUES (?, ?, 'SHA1', 6, 30, 0, datetime('now'))
+        VALUES (?, ?, 'SHA512', 6, 30, 0, datetime('now'))
         RETURNING account_id, secret_encrypted, algorithm, 
                   digits, period, is_verified, created_at
         "#,

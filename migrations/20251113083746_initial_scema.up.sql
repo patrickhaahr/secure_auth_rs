@@ -1,12 +1,11 @@
 -- Enable foreign keys
 PRAGMA foreign_keys = ON;
-
 -- Core account
 CREATE TABLE accounts (
     id TEXT PRIMARY KEY COLLATE NOCASE,
+    is_verified BOOLEAN NOT NULL DEFAULT 0 CHECK(is_verified IN (0, 1)),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-
 -- CPR data
 CREATE TABLE cpr_data (
     account_id TEXT PRIMARY KEY,
@@ -14,7 +13,6 @@ CREATE TABLE cpr_data (
     verified_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
 );
-
 -- Passkeys
 CREATE TABLE passkeys (
     id TEXT PRIMARY KEY,
@@ -29,19 +27,17 @@ CREATE TABLE passkeys (
     last_used_at TIMESTAMP,
     FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
 );
-
 -- TOTP secrets
 CREATE TABLE totp_secrets (
     account_id TEXT PRIMARY KEY,
     secret_encrypted BLOB NOT NULL,
-    algorithm TEXT NOT NULL DEFAULT 'SHA1' CHECK(algorithm IN ('SHA1')),
+    algorithm TEXT NOT NULL DEFAULT 'SHA512' CHECK(algorithm IN ('SHA512')),
     digits INTEGER NOT NULL DEFAULT 6 CHECK(digits = 6),
     period INTEGER NOT NULL DEFAULT 30 CHECK(period = 30),
     is_verified BOOLEAN NOT NULL DEFAULT 0 CHECK(is_verified IN (0, 1)),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
 );
-
 -- Admin roles
 CREATE TABLE account_roles (
     account_id TEXT PRIMARY KEY,
@@ -49,12 +45,10 @@ CREATE TABLE account_roles (
     assigned_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
 );
-
 -- Indexes
 CREATE INDEX idx_passkeys_account_id ON passkeys(account_id);
 CREATE INDEX idx_passkeys_credential_id ON passkeys(credential_id);
 CREATE UNIQUE INDEX idx_cpr_hash ON cpr_data(cpr_hash);
-
 -- Passkey limit trigger
 CREATE TRIGGER enforce_passkey_limit 
 BEFORE INSERT ON passkeys
