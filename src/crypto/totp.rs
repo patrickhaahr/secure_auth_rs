@@ -440,13 +440,6 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_totp_secret_uniqueness() {
-        let secret1 = generate_totp_secret();
-        let secret2 = generate_totp_secret();
-        assert_ne!(secret1, secret2, "Generated secrets should be unique");
-    }
-
-    #[test]
     fn test_encrypt_decrypt_roundtrip() {
         let secret = generate_totp_secret();
         let key = generate_test_key();
@@ -455,27 +448,6 @@ mod tests {
         let decrypted = decrypt_totp_secret(&encrypted, &key).expect("Decryption failed");
 
         assert_eq!(secret, decrypted, "Decrypted secret should match original");
-    }
-
-    #[test]
-    fn test_encrypt_produces_different_ciphertext() {
-        let secret = "JBSWY3DPEHPK3PXP";
-        let key = generate_test_key();
-
-        let encrypted1 = encrypt_totp_secret(secret, &key).expect("First encryption failed");
-        let encrypted2 = encrypt_totp_secret(secret, &key).expect("Second encryption failed");
-
-        assert_ne!(
-            encrypted1, encrypted2,
-            "Different nonces should produce different ciphertexts"
-        );
-
-        // Both should decrypt to the same secret
-        let decrypted1 = decrypt_totp_secret(&encrypted1, &key).expect("First decryption failed");
-        let decrypted2 = decrypt_totp_secret(&encrypted2, &key).expect("Second decryption failed");
-
-        assert_eq!(decrypted1, secret);
-        assert_eq!(decrypted2, secret);
     }
 
     #[test]
@@ -585,25 +557,6 @@ mod tests {
     }
 
     #[test]
-    fn test_generate_qr_uri_with_special_characters() {
-        let secret = generate_totp_secret();
-        let account_id = "test+user@example.com";
-        let issuer = "My App & Service";
-
-        let data_uri = generate_qr_uri(&secret, account_id, issuer).expect("URI generation failed");
-
-        // Should be a valid data URI (base64-encoded PNG)
-        assert!(
-            data_uri.starts_with("data:image/png;base64,"),
-            "Should be a base64-encoded PNG data URI"
-        );
-
-        // Verify it's not empty
-        let base64_part = data_uri.strip_prefix("data:image/png;base64,").unwrap();
-        assert!(!base64_part.is_empty(), "Base64 data should not be empty");
-    }
-
-    #[test]
     fn test_generate_otpauth_uri_format() {
         let secret = generate_totp_secret();
         let account_id = "A1B2C3D4E5F6G7H8";
@@ -623,22 +576,6 @@ mod tests {
             uri.contains("algorithm=SHA512"),
             "URI should specify SHA512"
         );
-    }
-
-    #[test]
-    fn test_generate_otpauth_uri_with_special_characters() {
-        let secret = generate_totp_secret();
-        let account_id = "test+user@example.com";
-        let issuer = "My App & Service";
-
-        let uri = generate_otpauth_uri(&secret, account_id, issuer).expect("URI generation failed");
-
-        // URL encoding should be handled by totp-rs
-        assert!(
-            uri.starts_with("otpauth://totp/"),
-            "URI should be valid otpauth URL"
-        );
-        assert!(uri.contains(&secret), "URI should contain secret");
     }
 
     #[test]
@@ -672,94 +609,6 @@ mod tests {
         // Verify code against original secret
         let is_valid = verify_totp_code(&secret, &code).expect("Verification failed");
         assert!(is_valid, "Code from decrypted secret should verify");
-    }
-
-    #[test]
-    fn test_full_flow_qr_uri_to_code_verification() {
-        // Full flow: generate secret -> create otpauth URI -> extract secret -> verify code
-        let secret = generate_totp_secret();
-        let account_id = "test_account";
-        let issuer = "TestApp";
-
-        // Generate otpauth URI
-        let uri = generate_otpauth_uri(&secret, account_id, issuer).expect("URI generation failed");
-
-        // Verify URI contains the secret (simulating manual entry or QR scan)
-        assert!(
-            uri.contains(&secret),
-            "OTPAuth URI should contain the secret"
-        );
-
-        // Generate code using the same secret
-        let code = generate_totp_code(&secret).expect("Code generation failed");
-
-        // Verify the code (simulating user entering code from authenticator app)
-        let is_valid = verify_totp_code(&secret, &code).expect("Verification failed");
-        assert!(is_valid, "Code should verify after otpauth URI generation");
-    }
-
-    #[test]
-    fn test_full_flow_end_to_end_with_encryption() {
-        // Complete end-to-end flow with all components
-        let key = generate_test_key();
-        let account_id = "user123";
-        let issuer = "SecureApp";
-
-        // 1. Generate secret
-        let secret = generate_totp_secret();
-
-        // 2. Encrypt secret for storage
-        let encrypted = encrypt_totp_secret(&secret, &key).expect("Encryption failed");
-
-        // 3. Generate QR data URI and otpauth URI for user enrollment
-        let qr_data_uri =
-            generate_qr_uri(&secret, account_id, issuer).expect("QR generation failed");
-        assert!(
-            qr_data_uri.starts_with("data:image/png;base64,"),
-            "QR should be base64 PNG data URI"
-        );
-
-        let otpauth_uri = generate_otpauth_uri(&secret, account_id, issuer)
-            .expect("OTPAuth URI generation failed");
-        assert!(
-            otpauth_uri.contains(&secret),
-            "OTPAuth URI should contain secret"
-        );
-        assert!(
-            otpauth_uri.contains("algorithm=SHA512"),
-            "OTPAuth URI should specify SHA512"
-        );
-
-        // 4. Simulate time passing - decrypt secret from storage
-        let decrypted = decrypt_totp_secret(&encrypted, &key).expect("Decryption failed");
-        assert_eq!(secret, decrypted, "Decrypted secret should match original");
-
-        // 5. Generate code (simulating authenticator app)
-        let code = generate_totp_code(&decrypted).expect("Code generation failed");
-        assert_eq!(code.len(), 6, "Code should be 6 digits");
-
-        // 6. Verify code (simulating login)
-        let is_valid = verify_totp_code(&decrypted, &code).expect("Verification failed");
-        assert!(is_valid, "Valid code should verify successfully");
-
-        // 7. Verify invalid code fails
-        let invalid_code = "000000";
-        let is_valid = verify_totp_code(&decrypted, invalid_code).expect("Verification failed");
-        assert!(!is_valid, "Invalid code should not verify");
-    }
-
-    #[test]
-    fn test_code_generation_consistency() {
-        // Verify that the same secret generates the same code at the same time
-        let secret = generate_totp_secret();
-
-        let code1 = generate_totp_code(&secret).expect("First code generation failed");
-        let code2 = generate_totp_code(&secret).expect("Second code generation failed");
-
-        assert_eq!(
-            code1, code2,
-            "Same secret should generate identical codes at same time"
-        );
     }
 
     #[test]

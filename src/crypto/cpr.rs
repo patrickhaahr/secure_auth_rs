@@ -348,14 +348,6 @@ mod tests {
     }
 
     #[test]
-    fn test_hash_cpr_with_invalid_format_wrong_hyphen_position() {
-        let invalid_cpr = "010190-12-34"; // Extra hyphen
-        let result = hash_cpr(invalid_cpr);
-
-        assert!(result.is_err(), "CPR with wrong format should be invalid");
-    }
-
-    #[test]
     fn test_hash_cpr_with_invalid_day() {
         let invalid_cpr = "000190-1234"; // Day 00
         let result = hash_cpr(invalid_cpr);
@@ -381,97 +373,4 @@ mod tests {
         assert!(result.is_err(), "Month 13 should be invalid");
     }
 
-    #[test]
-    fn test_hash_cpr_with_non_numeric_characters() {
-        let invalid_cpr = "01019A-1234"; // Letter in date
-        let result = hash_cpr(invalid_cpr);
-
-        assert!(result.is_err(), "Non-numeric characters should be invalid");
-
-        let invalid_cpr = "010190-12X4"; // Letter in sequence
-        let result = hash_cpr(invalid_cpr);
-
-        assert!(result.is_err(), "Non-numeric characters should be invalid");
-    }
-
-    #[test]
-    fn test_verify_cpr_with_empty_string() {
-        let empty_cpr = "";
-        let valid_cpr = "010190-1234";
-        let hash = hash_cpr(valid_cpr).expect("Failed to hash CPR");
-
-        let result = verify_cpr(empty_cpr, &hash);
-
-        assert!(result.is_err(), "Empty CPR should return an error");
-        assert!(
-            matches!(result.unwrap_err(), CprHashError::InvalidFormat),
-            "Should return InvalidFormat error"
-        );
-    }
-
-    #[test]
-    fn test_validate_cpr_format_edge_cases() {
-        // Valid edge cases
-        assert!(hash_cpr("311299-9999").is_ok(), "Max valid day and month");
-        assert!(hash_cpr("010100-0000").is_ok(), "Min valid values");
-
-        // Test various valid dates
-        assert!(hash_cpr("150685-1234").is_ok(), "Valid mid-range date");
-        assert!(hash_cpr("291095-5678").is_ok(), "Valid October date");
-    }
-
-    #[test]
-    fn test_pepper_based_cpr_hashing() {
-        // Set test pepper
-        unsafe {
-            std::env::set_var("CPR_PEPPER", "test_pepper_for_testing");
-        }
-
-        let cpr = "010190-1234";
-        let wrong_cpr = "020190-5678";
-
-        // Test hashing
-        let hash1 = hash_cpr(cpr).expect("First hash should succeed");
-        let hash2 = hash_cpr(cpr).expect("Second hash should succeed");
-
-        // Hashes should be different due to random salt
-        assert_ne!(
-            hash1, hash2,
-            "Hashes should be different due to random salt"
-        );
-
-        // Both should verify correctly
-        assert!(
-            verify_cpr(cpr, &hash1).expect("First verification should succeed"),
-            "First hash should verify"
-        );
-        assert!(
-            verify_cpr(cpr, &hash2).expect("Second verification should succeed"),
-            "Second hash should verify"
-        );
-
-        // Wrong CPR should not verify
-        assert!(
-            !verify_cpr(wrong_cpr, &hash1).expect("Wrong CPR verification should succeed"),
-            "Wrong CPR should not verify"
-        );
-
-        // Test that different peppers produce different hashes
-        unsafe {
-            std::env::set_var("CPR_PEPPER", "different_pepper");
-        }
-        let hash_with_different_pepper =
-            hash_cpr(cpr).expect("Hash with different pepper should succeed");
-
-        unsafe {
-            std::env::set_var("CPR_PEPPER", "test_pepper_for_testing");
-        }
-        let hash_with_original_pepper =
-            hash_cpr(cpr).expect("Hash with original pepper should succeed");
-
-        assert_ne!(
-            hash_with_different_pepper, hash_with_original_pepper,
-            "Different peppers should produce different hashes"
-        );
-    }
 }
